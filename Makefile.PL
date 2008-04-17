@@ -7,6 +7,9 @@ eval {
 	require Prima::Config;
 	$d = join(' ', map { "-D$_" } @{$Prima::Config::Config{cdefs}});
 	$i = join(' ', map { "-I$_" } @{$Prima::Config::Config{incpaths}});
+	for ( @{$Prima::Config::Config{incpaths}}) {
+		$i .= " -I$_/ImageMagick" if -d "$_/ImageMagick";
+	}
 	$l = $Prima::Config::Config{libname} if $^O =~ /win32|os2/i;
 };
 
@@ -19,7 +22,7 @@ WriteMakefile(
 	},
 	ABSTRACT_FROM     => 'lib/Prima/Image/Magick.pm',
 	AUTHOR            => 'Dmitry Karasik <dmitry@karasik.eu.org>',
-	LIBS              => [ $l . (( $^O =~ /win32/i) ? ' -lCORE_RL_magick_' : ' -lMagick' )  ],
+	LIBS              => [ $l . (( $^O =~ /win32/i) ? ' -lCORE_RL_magick_' : ' -lMagickCore' )  ],
 	DEFINE            => $d,
 	INC               => $i,
 	OBJECT            => "prima\$(OBJ_EXT) mag\$(OBJ_EXT) Magick\$(OBJ_EXT)",
