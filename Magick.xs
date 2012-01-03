@@ -49,27 +49,33 @@ PPCODE:
 		pim. bpp   /= 2;
 	}
 
+	/*
+	force-convert all float/real/short/long etc pixels into 8-bit
+	because even though ImageMagick understands these pixel types, it converts them internally
+	to Char anyway, and doesn't normalize them. (note: it didn't convert them before, but something
+	changed and it does so now). So we do that job ourselves -- we resample them explicitly to 0-255,
+	and convert to 8 bit to avoid mis-interpertattion of non-byte data, in general
+	*/
+
 	if ( pim. category & IS_FLOAT) {
-		pixeltype  = FloatPixel;
+		pixeltype  = CharPixel;
 		colorspace = GRAYColorspace;
+		dst_bpp   = 8; /* force-convert to byte */
 	} else if ( pim. category & IS_DOUBLE) {
-		pixeltype  = DoublePixel;
+		pixeltype  = CharPixel;
 		colorspace = GRAYColorspace;
+		dst_bpp   = 8; /* force-convert to byte */
 	} else if ( pim. category & IS_GRAY) {
-		if ( pim. bpp == 8 * sizeof( long)) {
-			pixeltype = LongPixel;
-		} else if (  pim. bpp == 8 * sizeof( int)) {
-			pixeltype = IntegerPixel;
-		} else if (  pim. bpp == 8 * sizeof( short)) {
-			pixeltype = ShortPixel;
-		} else if ( pim. bpp == 8) {
-			pixeltype = CharPixel;
-		} else if ( pim. bpp == 1) {
-			pixeltype = CharPixel;
-			dst_bpp   = 8; /* force-convert to byte */
-		} else {
+		if ( 
+			pim. bpp != 1 &&
+			pim. bpp != 4 &&
+			pim. bpp != 8 &&
+			pim. bpp != 16 &&
+			pim. bpp != 32
+		) 
 			croak("Cannot convert this image type to magick");
-		}
+		pixeltype = CharPixel;
+		dst_bpp   = 8; /* force-convert to byte */
 		colorspace = GRAYColorspace;
 	} else if ( pim. bpp == 24) {
 		colorspace = RGBColorspace;
@@ -82,7 +88,8 @@ PPCODE:
 	} else {
 		croak("Cannot convert this image type to magick");
 	}
-	bitcopyproc = get_prima_bitcopy_proc( pim. bpp, dst_bpp );
+
+	bitcopyproc = get_prima_bitcopy_proc( pim.category, pim.bpp, dst_bpp );
 
 	/* prepare magick image */
 	sv = SvRV( ST( 1));
@@ -94,11 +101,11 @@ PPCODE:
 		croak("cannot AcquireMagickInfo()");
         info-> colorspace = colorspace;
 	sprintf( info-> size = sizebuf, "%dx%d", pim. width, pim. height);
-	ip = AllocateImage( info);
+	ip = AcquireImage( info);
 	info-> size = NULL;
 	DestroyImageInfo( info);
 	if ( ip == NULL)
-		croak("cannot AllocateImage()");
+		croak("cannot AcquireImage()");
 
 	/* repad and possibly convert */
 	{
@@ -111,8 +118,8 @@ PPCODE:
 			croak("not enough memory (%d bytes)", lw * pim. height);
 		}
 		/* bzero( buffer, lw * pim. height); */
-	
-		if ( bitcopyproc == get_prima_bitcopy_proc( 8, 8)) {
+
+		if ( bitcopyproc == get_prima_bitcopy_proc( 0, 8, 8)) {
 			/* count in bytes for memcpy */
 			bw = pim. bpp / 8 * pim. width;
 		} else {
@@ -125,7 +132,7 @@ PPCODE:
 			y < pim. height;
 			y++, in += pim. line_size, out -= lw
 		)
-			bitcopyproc( in, out, bw, pim. palette);
+			bitcopyproc( &pim, in, out, bw);
 	}
 
 	/* transfer */
